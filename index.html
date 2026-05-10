@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Turnos del Coche</title>
+<style>
+  :root {
+    --primary: #1a5c3a; --primary-light: #e8f5ee; --primary-mid: #2d7a52;
+    --accent: #f4a923; --accent-light: #fef3d9;
+    --danger: #c0392b; --danger-light: #fdf0ef;
+    --bg: #f7f8f5; --surface: #ffffff; --border: #e2e6de;
+    --text: #1c2e1f; --text2: #5a7060; --text3: #8fa898;
+    --radius: 12px; --radius-sm: 8px;
+    --shadow: 0 2px 8px rgba(0,0,0,0.07); --shadow-md: 0 4px 20px rgba(0,0,0,0.11);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  .header { background: var(--primary); color: white; padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .header-icon { font-size: 28px; }
+  .header h1 { font-size: 1.25rem; font-weight: 600; }
+  .header p { font-size: 0.8rem; opacity: 0.75; margin-top: 1px; }
+  .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .header-date { font-size: 0.8rem; opacity: 0.8; text-align: right; }
+  .sync-status { font-size: 0.72rem; display: flex; align-items: center; gap: 4px; opacity: 0.85; }
+  .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #4caf50; flex-shrink: 0; }
+  .sync-dot.syncing { background: #f4a923; animation: pulse 1s infinite; }
+  .sync-dot.error { background: #e53935; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .main { max-width: 860px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+
+  /* LOADING OVERLAY */
+  .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.92); z-index: 300; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+  .loading-overlay.hidden { display: none; }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 0.95rem; color: var(--text2); font-weight: 500; }
+
+  /* CONFIG BANNER */
+  .config-banner { background: #fff3cd; border: 1.5px solid #f0c050; border-radius: var(--radius); padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: 0.875rem; line-height: 1.7; }
+  .config-banner strong { color: #7a4f00; }
+  .config-banner code { background: #f0e0a0; padding: 1px 6px; border-radius: 4px; font-size: 0.82rem; }
+  .config-input-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .config-input-row input { flex: 1; min-width: 200px; padding: 8px 12px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 0.875rem; }
+  .config-input-row input:focus { outline: none; border-color: var(--primary); }
+
+  /* TODAY CARD */
+  .today-card { background: var(--surface); border-radius: var(--radius); border: 1.5px solid var(--border); box-shadow: var(--shadow-md); padding: 1.5rem; margin-bottom: 1.5rem; }
+  .today-card h2 { font-size: 0.75rem; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1rem; }
+  .driver-display { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.25rem; }
+  .driver-avatar { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; font-weight: 700; flex-shrink: 0; }
+  .driver-info h3 { font-size: 1.4rem; font-weight: 700; }
+  .driver-info p { font-size: 0.85rem; color: var(--text2); margin-top: 2px; }
+  .driver-badge { display: inline-flex; align-items: center; gap: 4px; background: var(--primary-light); color: var(--primary); font-size: 0.75rem; font-weight: 600; padding: 3px 10px; border-radius: 20px; margin-top: 4px; }
+  .holiday-banner { background: #fff3cd; border: 1.5px solid #f0d060; border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 1rem; font-size: 0.88rem; color: #7a5500; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+
+  .who-section { border-top: 1px solid var(--border); padding-top: 1.25rem; }
+  .who-section > label { font-size: 0.8rem; font-weight: 600; color: var(--text2); display: block; margin-bottom: 0.75rem; }
+  .passengers-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1rem; }
+  .passenger-btn { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 24px; border: 1.5px solid var(--border); background: var(--surface); cursor: pointer; font-size: 0.9rem; font-weight: 500; color: var(--text2); transition: all 0.15s; user-select: none; }
+  .passenger-btn:hover { border-color: var(--primary-mid); color: var(--primary); }
+  .passenger-btn.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+  .passenger-btn .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .actions-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 0.75rem; }
+
+  .btn { padding: 9px 18px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { background: var(--bg); border-color: var(--text3); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: var(--primary); border-color: var(--primary); color: white; }
+  .btn-primary:hover { background: var(--primary-mid); border-color: var(--primary-mid); }
+  .btn-danger { background: var(--danger-light); border-color: var(--danger); color: var(--danger); }
+  .btn-danger:hover { background: var(--danger); color: white; }
+  .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+
+  .next-card { background: var(--accent-light); border: 1.5px solid #f0d080; border-radius: var(--radius); padding: 1rem 1.5rem; margin-bottom: 1.5rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .next-card-info p { font-size: 0.75rem; font-weight: 600; color: #7a5500; text-transform: uppercase; letter-spacing: 0.07em; }
+  .next-card-info h3 { font-size: 1.1rem; font-weight: 700; color: #4a3200; margin-top: 2px; }
+  .next-card-icon { font-size: 2rem; }
+
+  .section-title { font-size: 0.75rem; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.75rem; display: flex; align-items: center; justify-content: space-between; }
+
+  /* HISTORY */
+  .history-section { background: var(--surface); border-radius: var(--radius); border: 1.5px solid var(--border); overflow: hidden; margin-bottom: 1.5rem; }
+  .history-header { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .history-header h2 { font-size: 0.85rem; font-weight: 600; color: var(--text2); }
+  .history-table-wrap { overflow-x: auto; max-height: 480px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; min-width: 560px; }
+  thead { position: sticky; top: 0; background: var(--bg); z-index: 1; }
+  th { padding: 8px 12px; text-align: left; font-size: 0.72rem; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: var(--bg); }
+  .badge-driver { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.72rem; font-weight: 600; }
+  .turno-code { display: inline-flex; align-items: center; gap: 4px; }
+  .turno-t { font-size: 0.7rem; font-weight: 700; background: var(--primary-light); color: var(--primary); padding: 1px 6px; border-radius: 8px; }
+  .turno-initials { font-size: 0.82rem; font-weight: 600; color: var(--text); font-family: monospace; letter-spacing: 0.5px; }
+  .obs-cell { color: var(--text2); font-style: italic; font-size: 0.78rem; max-width: 180px; }
+
+  /* MODAL */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 100; align-items: center; justify-content: center; padding: 1rem; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--radius); width: 100%; max-width: 480px; box-shadow: var(--shadow-md); overflow: hidden; max-height: 92vh; display: flex; flex-direction: column; }
+  .modal-head { padding: 1.25rem 1.5rem 1rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+  .modal-head h3 { font-size: 1rem; font-weight: 600; }
+  .modal-close { background: none; border: none; font-size: 1.4rem; cursor: pointer; color: var(--text3); }
+  .modal-body { padding: 1.25rem 1.5rem; overflow-y: auto; }
+  .modal-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; flex-shrink: 0; }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text2); margin-bottom: 5px; }
+  .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 9px 12px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: 0.9rem; color: var(--text); background: var(--surface); font-family: inherit; }
+  .form-group textarea { resize: vertical; min-height: 72px; }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--primary); }
+
+  /* DRIVERS */
+  .drivers-section { background: var(--surface); border-radius: var(--radius); border: 1.5px solid var(--border); padding: 1.25rem; margin-bottom: 1.5rem; }
+  .driver-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .driver-row:last-child { border-bottom: none; }
+  .driver-row .name { flex: 1; font-weight: 500; font-size: 0.9rem; }
+  .status-pill { font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 12px; }
+  .pill-active { background: var(--primary-light); color: var(--primary); }
+  .pill-inactive { background: var(--bg); color: var(--text3); border: 1px solid var(--border); }
+
+  /* CALENDAR */
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .cal-nav h3 { font-size: 1rem; font-weight: 600; text-transform: capitalize; }
+  .cal-nav button { background: none; border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 5px 12px; cursor: pointer; font-size: 0.85rem; color: var(--text2); }
+  .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 3px; }
+  .cal-day-header { text-align: center; font-size: 0.7rem; font-weight: 600; color: var(--text3); padding: 4px 0; text-transform: uppercase; }
+  .cal-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); font-size: 0.82rem; cursor: pointer; border: 1.5px solid transparent; transition: all 0.12s; }
+  .cal-day:hover { background: var(--primary-light); }
+  .cal-day.empty { cursor: default; pointer-events: none; }
+  .cal-day.weekend { color: var(--text3); }
+  .cal-day.today { border-color: var(--primary); font-weight: 700; color: var(--primary); }
+  .cal-day.holiday { background: #ffeaa0; color: #7a5500; font-weight: 600; border-color: #f0c800; }
+  .cal-day.holiday:hover { background: #ffda60; }
+  .cal-day.has-turn { background: var(--primary-light); color: var(--primary); }
+  .cal-day.has-turn.holiday { background: #ffd080; }
+  .cal-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 1rem; font-size: 0.75rem; color: var(--text2); }
+  .cal-legend-item { display: flex; align-items: center; gap: 5px; }
+  .cal-legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+  .holiday-list { margin-top: 1rem; max-height: 160px; overflow-y: auto; }
+  .holiday-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 0.85rem; }
+  .holiday-item:last-child { border-bottom: none; }
+  .holiday-remove { background: none; border: none; color: var(--danger); cursor: pointer; font-size: 0.9rem; padding: 0 4px; }
+
+  /* TOAST */
+  .toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%) translateY(100px); background: var(--text); color: white; padding: 10px 20px; border-radius: 24px; font-size: 0.875rem; font-weight: 500; z-index: 400; transition: transform 0.3s ease; pointer-events: none; white-space: nowrap; }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* TABS */
+  .tabs { display: flex; gap: 4px; margin-bottom: 1.5rem; background: var(--surface); border-radius: var(--radius-sm); padding: 4px; border: 1.5px solid var(--border); }
+  .tab { flex: 1; padding: 8px; text-align: center; border-radius: 6px; border: none; background: none; font-size: 0.82rem; font-weight: 500; color: var(--text2); cursor: pointer; transition: all 0.15s; }
+  .tab.active { background: var(--primary); color: white; }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  @media (max-width: 600px) {
+    .header h1 { font-size: 1rem; }
+    .today-card { padding: 1.25rem 1rem; }
+    .next-card { flex-direction: column; gap: 0.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOADING OVERLAY -->
+<div class="loading-overlay" id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loading-text">Conectando con Google Drive…</div>
+</div>
+
+<div class="header">
+  <div class="header-left">
+    <div class="header-icon">🚗</div>
+    <div>
+      <h1>Turnos del Coche</h1>
+      <p>Carmen · Jose María · Diego · Abel</p>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="header-date" id="header-date"></div>
+    <div class="sync-status">
+      <div class="sync-dot" id="sync-dot"></div>
+      <span id="sync-label">Conectado</span>
+    </div>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- CONFIG BANNER (visible hasta que se configure la URL) -->
+  <div class="config-banner" id="config-banner" style="display:none;">
+    <strong>⚙️ Configuración necesaria</strong> — Pega aquí la URL de tu Apps Script desplegado:
+    <div class="config-input-row">
+      <input type="text" id="script-url-input" placeholder="https://script.google.com/macros/s/…/exec">
+      <button class="btn btn-primary" onclick="saveScriptUrl()">Guardar y conectar</button>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('hoy')">Hoy</button>
+    <button class="tab" onclick="showTab('historial')">Historial</button>
+    <button class="tab" onclick="showTab('calendario')">Festivos</button>
+    <button class="tab" onclick="showTab('conductores')">Conductores</button>
+  </div>
+
+  <!-- TAB: HOY -->
+  <div class="tab-panel active" id="tab-hoy">
+    <div class="today-card">
+      <h2>🗓️ Registrar turno</h2>
+      <div id="holiday-banner" class="holiday-banner" style="display:none;">
+        🎉 <span id="holiday-banner-text">Hoy es festivo</span>
+      </div>
+      <div class="form-group" style="margin-bottom:1.25rem;">
+        <label style="font-size:0.8rem;font-weight:600;color:var(--text2);display:block;margin-bottom:5px;">Fecha del turno</label>
+        <input type="date" id="turno-date" style="max-width:220px;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:0.9rem;color:var(--text);background:var(--surface);font-family:inherit;">
+      </div>
+      <div class="driver-display">
+        <div class="driver-avatar" id="today-avatar"></div>
+        <div class="driver-info">
+          <h3 id="today-driver-name">—</h3>
+          <p id="today-driver-info">Cargando…</p>
+          <div class="driver-badge" id="today-badge">🔄 Rotación fija</div>
+        </div>
+      </div>
+      <div class="who-section">
+        <label>¿Quién va ese día? (marca los que vienen)</label>
+        <div class="passengers-grid" id="passengers-grid"></div>
+        <div class="form-group" style="margin-top:0.75rem;margin-bottom:0.5rem;">
+          <label>Observaciones (opcional)</label>
+          <textarea id="obs-input" placeholder="Ej: Carmen compensando turno del 5/5…" rows="2"></textarea>
+        </div>
+        <div class="actions-row">
+          <button class="btn btn-primary" id="btn-save" onclick="saveToday()">✅ Registrar turno</button>
+          <button class="btn" onclick="openModifyModal()">✏️ Modificar conductor</button>
+          <button class="btn btn-sm" onclick="loadFromServer()" title="Recargar datos">🔄 Actualizar</button>
+        </div>
+      </div>
+    </div>
+    <div class="next-card">
+      <div class="next-card-info">
+        <p>📅 Próximo turno</p>
+        <h3 id="next-driver-name">—</h3>
+        <p style="font-size:0.8rem;margin-top:4px;font-weight:400;" id="next-driver-sub">según rotación</p>
+      </div>
+      <div class="next-card-icon" id="next-icon">🏷️</div>
+    </div>
+  </div>
+
+  <!-- TAB: HISTORIAL -->
+  <div class="tab-panel" id="tab-historial">
+    <div class="history-section">
+      <div class="history-header">
+        <h2>📋 Historial de turnos</h2>
+        <span id="history-count" style="font-size:0.8rem;color:var(--text3);"></span>
+      </div>
+      <div class="history-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th><th>Día</th><th>Conduce</th><th>Turno</th><th>Observaciones</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: FESTIVOS -->
+  <div class="tab-panel" id="tab-calendario">
+    <div style="background:var(--surface);border-radius:var(--radius);border:1.5px solid var(--border);padding:1.5rem;margin-bottom:1.5rem;">
+      <div style="margin-bottom:1rem;font-size:0.85rem;color:var(--text2);line-height:1.6;">
+        📌 Haz clic en cualquier día para marcarlo como festivo (o desmarcarlo). Los festivos no computan en la rotación.
+      </div>
+      <div class="cal-nav">
+        <button onclick="calPrev()">← Anterior</button>
+        <h3 id="cal-title"></h3>
+        <button onclick="calNext()">Siguiente →</button>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+      <div class="cal-legend">
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#ffeaa0;border:1px solid #f0c800;"></div> Festivo</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--primary-light);border:1px solid var(--primary);"></div> Turno registrado</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="border:1.5px solid var(--primary);"></div> Hoy</div>
+      </div>
+    </div>
+    <div style="background:var(--surface);border-radius:var(--radius);border:1.5px solid var(--border);padding:1.25rem;">
+      <div class="section-title" style="margin-bottom:0.75rem;">
+        Festivos marcados
+        <span id="holiday-total-count" style="font-size:0.75rem;color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0;"></span>
+      </div>
+      <div class="holiday-list" id="holiday-list"></div>
+    </div>
+  </div>
+
+  <!-- TAB: CONDUCTORES -->
+  <div class="tab-panel" id="tab-conductores">
+    <div class="drivers-section">
+      <div class="section-title" style="margin-bottom:1rem;">Conductores
+        <button class="btn btn-sm btn-primary" onclick="openAddDriverModal()">+ Añadir conductor</button>
+      </div>
+      <div id="drivers-list"></div>
+    </div>
+    <p style="font-size:0.8rem;color:var(--text3);margin-top:0.75rem;padding:0 0.25rem;">
+      Los conductores desactivados no aparecen en la rotación pero se conserva su historial.
+    </p>
+  </div>
+
+</div><!-- /main -->
+
+<!-- MODAL: MODIFY DRIVER -->
+<div class="modal-overlay" id="modal-modify">
+  <div class="modal">
+    <div class="modal-head"><h3>✏️ Modificar conductor del turno</h3><button class="modal-close" onclick="closeModal('modal-modify')">×</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>Nuevo conductor</label><select id="modify-driver-select"></select></div>
+      <div class="form-group"><label>Motivo del cambio</label><textarea id="modify-reason" rows="2" placeholder="Ej: Jose María no puede, lo lleva Carmen"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-modify')">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmModify()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADD DRIVER -->
+<div class="modal-overlay" id="modal-add-driver">
+  <div class="modal">
+    <div class="modal-head"><h3>➕ Añadir nuevo conductor</h3><button class="modal-close" onclick="closeModal('modal-add-driver')">×</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>Nombre</label><input type="text" id="new-driver-name" placeholder="Nombre del conductor"></div>
+      <p style="font-size:0.8rem;color:var(--text2);">Se añadirá al final de la rotación. La inicial para los códigos de turno será la primera letra del nombre.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-add-driver')">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmAddDriver()">Añadir</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: EDIT HISTORY ROW -->
+<div class="modal-overlay" id="modal-edit-row">
+  <div class="modal">
+    <div class="modal-head"><h3>✏️ Editar turno</h3><button class="modal-close" onclick="closeModal('modal-edit-row')">×</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>Fecha</label><input type="date" id="edit-date"></div>
+      <div class="form-group"><label>Conductor</label><select id="edit-driver-select"></select></div>
+      <div class="form-group">
+        <label>Pasajeros (marca quién fue)</label>
+        <div id="edit-passengers-grid" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;"></div>
+      </div>
+      <div class="form-group"><label>Observaciones</label><textarea id="edit-obs" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" onclick="deleteRow()">🗑 Eliminar</button>
+      <div style="flex:1"></div>
+      <button class="btn" onclick="closeModal('modal-edit-row')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEditRow()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   CONFIG
+   ============================================================ */
+const STORE_KEY    = 'turnos_coche_v3';
+const URL_KEY      = 'turnos_script_url';
+
+let SCRIPT_URL = localStorage.getItem(URL_KEY) || 'https://script.google.com/macros/s/AKfycbyPzQzm3gx2RU0m-M7MMbkZIW6VbhWMzj-YBq9YhSQhuRdVjqjZCERPCmwpXoXXCfon_Q/exec';
+
+/* ============================================================
+   STATE (in-memory, synced from/to Sheets)
+   ============================================================ */
+let state = {
+  drivers:   [],
+  history:   [],
+  holidays:  [],
+  todayModified: null,
+  todayPassengers: [],
+};
+
+const DEFAULT_DRIVERS = [
+  { id:'carmen',    name:'Carmen',     active:true, color:{bg:'#fee2f0',color:'#9e1166'} },
+  { id:'josemaria', name:'Jose María', active:true, color:{bg:'#e0f0ff',color:'#0c4a8c'} },
+  { id:'diego',     name:'Diego',      active:true, color:{bg:'#e8f5e9',color:'#1b5e2f'} },
+  { id:'abel',      name:'Abel',       active:true, color:{bg:'#fff3e0',color:'#8c4a00'} },
+];
+
+/* ============================================================
+   HISTORICAL DATA (used only to pre-populate on first load)
+   ============================================================ */
+const HISTORICAL_DATA = [
+  {date:'2025-02-27',day:'jueves',driver:'carmen',obs:''},
+  {date:'2025-03-04',day:'lunes',driver:'carmen',obs:''},
+  {date:'2025-03-06',day:'jueves',driver:'diego',obs:''},
+  {date:'2025-03-07',day:'viernes',driver:'carmen',obs:''},
+  {date:'2025-03-10',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2025-03-11',day:'martes',driver:'diego',obs:''},
+  {date:'2025-03-13',day:'jueves',driver:'abel',obs:''},
+  {date:'2025-03-14',day:'viernes',driver:'diego',obs:''},
+  {date:'2025-03-17',day:'lunes',driver:'abel',obs:''},
+  {date:'2025-03-18',day:'martes',driver:'diego',obs:''},
+  {date:'2025-03-20',day:'jueves',driver:'diego',obs:''},
+  {date:'2025-03-21',day:'viernes',driver:'carmen',obs:''},
+  {date:'2025-03-24',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2025-03-25',day:'martes',driver:'abel',obs:''},
+  {date:'2025-03-27',day:'jueves',driver:'abel',obs:''},
+  {date:'2025-03-28',day:'viernes',driver:'diego',obs:''},
+  {date:'2025-03-31',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2025-04-01',day:'martes',driver:'carmen',obs:''},
+  {date:'2025-04-02',day:'miercoles',driver:'diego',obs:''},
+  {date:'2025-04-03',day:'jueves',driver:'abel',obs:''},
+  {date:'2025-04-04',day:'viernes',driver:'carmen',obs:''},
+  {date:'2025-04-07',day:'lunes',driver:'abel',obs:''},
+  {date:'2025-04-08',day:'martes',driver:'diego',obs:''},
+  {date:'2025-04-09',day:'jueves',driver:'diego',obs:''},
+  {date:'2025-04-10',day:'viernes',driver:'carmen',obs:''},
+  {date:'2025-04-13',day:'lunes',driver:'carmen',obs:''},
+  {date:'2025-04-14',day:'martes',driver:'carmen',obs:''},
+  {date:'2025-04-21',day:'lunes',driver:'carmen',obs:''},
+  {date:'2025-04-22',day:'martes',driver:'abel',obs:''},
+  {date:'2025-04-24',day:'jueves',driver:'abel',obs:''},
+  {date:'2025-04-25',day:'viernes',driver:'josemaria',obs:''},
+  {date:'2025-04-28',day:'lunes',driver:'diego',obs:''},
+  {date:'2025-05-02',day:'viernes',driver:'abel',obs:''},
+  {date:'2025-05-05',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2025-05-06',day:'martes',driver:'carmen',obs:''},
+  {date:'2025-05-08',day:'jueves',driver:'diego',obs:''},
+  {date:'2025-05-12',day:'lunes',driver:'carmen',obs:''},
+  {date:'2025-05-13',day:'martes',driver:'diego',obs:''},
+  {date:'2025-05-16',day:'viernes',driver:'josemaria',obs:''},
+  {date:'2025-05-19',day:'lunes',driver:'diego',obs:''},
+  {date:'2025-05-20',day:'martes',driver:'abel',obs:''},
+  {date:'2025-05-22',day:'jueves',driver:'abel',obs:''},
+  {date:'2025-05-23',day:'viernes',driver:'josemaria',obs:''},
+  {date:'2025-05-26',day:'lunes',driver:'diego',obs:''},
+  {date:'2025-05-27',day:'martes',driver:'diego',obs:''},
+  {date:'2025-05-29',day:'jueves',driver:'carmen',obs:''},
+  {date:'2025-06-02',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2025-06-03',day:'martes',driver:'abel',obs:''},
+  {date:'2025-06-06',day:'viernes',driver:'carmen',obs:''},
+  {date:'2025-06-09',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2025-06-12',day:'jueves',driver:'carmen',obs:''},
+  {date:'2025-06-13',day:'viernes',driver:'abel',obs:''},
+  {date:'2025-06-16',day:'lunes',driver:'abel',obs:''},
+  {date:'2025-06-17',day:'martes',driver:'carmen',obs:''},
+  {date:'2025-06-18',day:'miercoles',driver:'abel',obs:''},
+  {date:'2025-06-23',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2025-06-24',day:'martes',driver:'carmen',obs:''},
+  {date:'2025-06-30',day:'lunes',driver:'carmen',obs:''},
+  {date:'2025-07-03',day:'jueves',driver:'diego',obs:''},
+  {date:'2025-07-07',day:'lunes',driver:'diego',obs:''},
+  {date:'2025-08-18',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2025-08-19',day:'martes',driver:'diego',obs:''},
+  {date:'2025-08-20',day:'miercoles',driver:'carmen',obs:''},
+  {date:'2025-08-21',day:'jueves',driver:'diego',obs:''},
+  {date:'2025-08-25',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2025-08-26',day:'martes',driver:'carmen',obs:''},
+  {date:'2025-08-27',day:'miercoles',driver:'diego',obs:''},
+  {date:'2025-08-29',day:'viernes',driver:'josemaria',obs:''},
+  {date:'2025-09-01',day:'lunes',driver:'carmen',obs:''},
+  {date:'2025-09-05',day:'viernes',driver:'diego',obs:''},
+  {date:'2025-09-08',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2025-09-09',day:'martes',driver:'abel',obs:''},
+  {date:'2025-09-10',day:'miercoles',driver:'diego',obs:''},
+  {date:'2025-09-11',day:'jueves',driver:'carmen',obs:''},
+  {date:'2025-09-12',day:'viernes',driver:'carmen',obs:''},
+  {date:'2025-09-15',day:'lunes',driver:'carmen',obs:''},
+  {date:'2025-09-16',day:'martes',driver:'diego',obs:''},
+  {date:'2025-09-22',day:'lunes',driver:'diego',obs:'Se lo lleva Diego porque Dani finalmente no vino a la hora de recogerlo.'},
+  {date:'2025-09-23',day:'martes',driver:'diego',obs:'Se lo lleva Diego porque Dani finalmente no vino a la hora de recogerlo.'},
+  {date:'2025-09-26',day:'viernes',driver:'carmen',obs:'Se lo lleva Carmen porque le debía un turno a Jose María'},
+  {date:'2025-09-29',day:'lunes',driver:'carmen',obs:''},
+  {date:'2025-09-30',day:'martes',driver:'diego',obs:''},
+  {date:'2025-10-03',day:'viernes',driver:'josemaria',obs:'Se lo lleva José Mª porque le debía un turno a Diego (el del 22/09).'},
+  {date:'2025-10-06',day:'lunes',driver:'diego',obs:''},
+  {date:'2025-10-07',day:'martes',driver:'abel',obs:''},
+  {date:'2025-10-09',day:'jueves',driver:'abel',obs:''},
+  {date:'2025-10-10',day:'viernes',driver:'josemaria',obs:'Se lo lleva José Mª porque Dani no podía llevarlo.'},
+  {date:'2025-10-14',day:'martes',driver:'carmen',obs:''},
+  {date:'2025-10-16',day:'jueves',driver:'diego',obs:''},
+  {date:'2025-10-17',day:'viernes',driver:'abel',obs:'Se lo lleva Dani para compensar el turno del día 10/10'},
+  {date:'2025-10-20',day:'lunes',driver:'abel',obs:''},
+  {date:'2025-10-21',day:'martes',driver:'carmen',obs:''},
+  {date:'2025-10-22',day:'miercoles',driver:'abel',obs:''},
+  {date:'2025-10-23',day:'jueves',driver:'carmen',obs:''},
+  {date:'2025-10-24',day:'viernes',driver:'carmen',obs:''},
+  {date:'2025-10-27',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2025-10-28',day:'martes',driver:'diego',obs:''},
+  {date:'2025-10-30',day:'jueves',driver:'abel',obs:''},
+  {date:'2025-10-31',day:'viernes',driver:'carmen',obs:''},
+  {date:'2025-11-03',day:'lunes',driver:'abel',obs:''},
+  {date:'2025-11-07',day:'viernes',driver:'josemaria',obs:''},
+  {date:'2025-11-10',day:'lunes',driver:'diego',obs:''},
+  {date:'2025-11-13',day:'jueves',driver:'carmen',obs:''},
+  {date:'2025-11-17',day:'lunes',driver:'diego',obs:''},
+  {date:'2025-11-21',day:'viernes',driver:'josemaria',obs:''},
+  {date:'2025-11-24',day:'lunes',driver:'carmen',obs:''},
+  {date:'2025-11-25',day:'martes',driver:'diego',obs:''},
+  {date:'2025-11-28',day:'jueves',driver:'carmen',obs:''},
+  {date:'2025-12-01',day:'lunes',driver:'diego',obs:''},
+  {date:'2025-12-05',day:'viernes',driver:'josemaria',obs:'Se lo lleva José Mª porque hace cambio de turno.'},
+  {date:'2025-12-09',day:'lunes',driver:'carmen',obs:''},
+  {date:'2025-12-12',day:'viernes',driver:'abel',obs:''},
+  {date:'2025-12-15',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2025-12-16',day:'martes',driver:'diego',obs:'Se lo lleva Diego para compensar el turno del día 05-12'},
+  {date:'2025-12-18',day:'jueves',driver:'abel',obs:''},
+  {date:'2025-12-19',day:'viernes',driver:'carmen',obs:''},
+  {date:'2025-12-22',day:'lunes',driver:'diego',obs:''},
+  {date:'2025-12-23',day:'martes',driver:'diego',obs:''},
+  {date:'2026-01-08',day:'jueves',driver:'carmen',obs:'Se adelanta el turno y se lo lleva Diego (Carmen debe un turno)'},
+  {date:'2026-01-09',day:'viernes',driver:'abel',obs:''},
+  {date:'2026-01-12',day:'lunes',driver:'abel',obs:'Se lo lleva Abel'},
+  {date:'2026-01-13',day:'martes',driver:'diego',obs:'Se lo lleva Diego (Carmen debe un turno)'},
+  {date:'2026-01-15',day:'jueves',driver:'diego',obs:'Se lo lleva Diego'},
+  {date:'2026-01-16',day:'viernes',driver:'josemaria',obs:''},
+  {date:'2026-01-19',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2026-01-20',day:'martes',driver:'carmen',obs:'Se lo lleva Carmen porque le debe un turno a Diego'},
+  {date:'2026-01-22',day:'jueves',driver:'carmen',obs:''},
+  {date:'2026-01-23',day:'viernes',driver:'diego',obs:''},
+  {date:'2026-01-29',day:'jueves',driver:'diego',obs:''},
+  {date:'2026-01-30',day:'viernes',driver:'josemaria',obs:''},
+  {date:'2026-02-03',day:'martes',driver:'carmen',obs:''},
+  {date:'2026-02-06',day:'viernes',driver:'carmen',obs:''},
+  {date:'2026-02-09',day:'lunes',driver:'abel',obs:''},
+  {date:'2026-02-12',day:'jueves',driver:'diego',obs:''},
+  {date:'2026-02-13',day:'viernes',driver:'diego',obs:''},
+  {date:'2026-02-20',day:'viernes',driver:'josemaria',obs:''},
+  {date:'2026-03-02',day:'lunes',driver:'diego',obs:''},
+  {date:'2026-03-06',day:'viernes',driver:'josemaria',obs:''},
+  {date:'2026-03-09',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2026-03-13',day:'viernes',driver:'carmen',obs:''},
+  {date:'2026-03-16',day:'lunes',driver:'diego',obs:''},
+  {date:'2026-03-20',day:'viernes',driver:'josemaria',obs:''},
+  {date:'2026-03-23',day:'lunes',driver:'diego',obs:''},
+  {date:'2026-03-26',day:'jueves',driver:'carmen',obs:''},
+  {date:'2026-03-27',day:'viernes',driver:'carmen',obs:''},
+  {date:'2026-03-31',day:'martes',driver:'carmen',obs:''},
+  {date:'2026-04-01',day:'miercoles',driver:'carmen',obs:'Se lo lleva Carmen para compensar turno'},
+  {date:'2026-04-06',day:'lunes',driver:'diego',obs:''},
+  {date:'2026-04-07',day:'martes',driver:'diego',obs:''},
+  {date:'2026-04-09',day:'jueves',driver:'carmen',obs:'Se lo lleva Carmen para compensar turno'},
+  {date:'2026-04-10',day:'viernes',driver:'diego',obs:''},
+  {date:'2026-04-13',day:'lunes',driver:'josemaria',obs:''},
+  {date:'2026-04-16',day:'jueves',driver:'abel',obs:''},
+  {date:'2026-04-17',day:'viernes',driver:'abel',obs:'Se lo lleva Abel porque hace cambio de turno (José Mª le debe un turno)'},
+  {date:'2026-04-20',day:'lunes',driver:'diego',obs:''},
+  {date:'2026-04-21',day:'martes',driver:'abel',obs:'Se lo lleva Abel y el turno ya está regularizado'},
+  {date:'2026-04-23',day:'jueves',driver:'diego',obs:''},
+  {date:'2026-04-27',day:'lunes',driver:'diego',obs:''},
+  {date:'2026-04-28',day:'martes',driver:'diego',obs:''},
+  {date:'2026-04-30',day:'jueves',driver:'abel',obs:''},
+  {date:'2026-05-04',day:'lunes',driver:'carmen',obs:''},
+  {date:'2026-05-05',day:'martes',driver:'carmen',obs:''},
+  {date:'2026-05-07',day:'jueves',driver:'diego',obs:''},
+  {date:'2026-05-08',day:'viernes',driver:'josemaria',obs:'Se lo lleva Jose María, Carmen le debe un turno a Jose María'},
+];
+
+/* ============================================================
+   API CALLS
+   ============================================================ */
+function setSyncStatus(status) {
+  const dot = document.getElementById('sync-dot');
+  const lbl = document.getElementById('sync-label');
+  dot.className = 'sync-dot' + (status==='syncing'?' syncing':status==='error'?' error':'');
+  lbl.textContent = status==='syncing'?'Guardando…':status==='error'?'Sin conexión':'Conectado';
+}
+
+async function apiCall(payload) {
+  if (!SCRIPT_URL) throw new Error('Sin URL configurada');
+  setSyncStatus('syncing');
+  try {
+    const resp = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+    setSyncStatus('ok');
+    return data;
+  } catch(e) {
+    setSyncStatus('error');
+    throw e;
+  }
+}
+
+async function loadFromServer() {
+  if (!SCRIPT_URL) return;
+  setLoading(true, 'Cargando datos de Google Drive…');
+  try {
+    const data = await apiCall({ action: 'getAll' });
+    if (data.ok) {
+      if (data.drivers && data.drivers.length) state.drivers = data.drivers;
+      else if (!state.drivers.length) state.drivers = DEFAULT_DRIVERS;
+      if (data.history) state.history = data.history;
+      if (data.holidays) state.holidays = data.holidays;
+
+      // Si la hoja estaba vacía, subir histórico
+      if (state.history.length === 0) await uploadHistorical();
+      if (state.drivers.length === 0) { state.drivers = DEFAULT_DRIVERS; await apiCall({action:'saveDrivers', data: state.drivers}); }
+
+      renderAll();
+      toast('🔄 Datos actualizados');
+    }
+  } catch(e) {
+    toast('⚠️ No se pudo conectar con Google Drive');
+  }
+  setLoading(false);
+}
+
+async function uploadHistorical() {
+  state.history = HISTORICAL_DATA.map((r,i) => ({
+    id:'hist_'+i, date:r.date, day:r.day, driver:r.driver, passengers:[], obs:r.obs
+  }));
+  state.drivers = DEFAULT_DRIVERS;
+  for (const entry of state.history) {
+    await apiCall({ action:'saveHistory', data: entry });
+  }
+  await apiCall({ action:'saveDrivers', data: state.drivers });
+}
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+function todayStr() { return new Date().toISOString().split('T')[0]; }
+function formatDate(str) { if(!str)return''; const [y,m,d]=str.split('-'); return `${d}/${m}/${y}`; }
+function getDayName(str) {
+  if(!str)return'';
+  const days=['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  return days[new Date(str+'T12:00:00').getDay()];
+}
+function isHoliday(d) { return state.holidays.includes(d); }
+function isWeekend(d) { const dow=new Date(d+'T12:00:00').getDay(); return dow===0||dow===6; }
+function isWorkday(d) { return !isWeekend(d)&&!isHoliday(d); }
+function activeDrivers() { return state.drivers.filter(d=>d.active); }
+function getDriver(id) { return state.drivers.find(d=>d.id===id); }
+function getDriverName(id) { const d=getDriver(id); return d?d.name:id; }
+function getDriverInitials(id) { return getDriverName(id).split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2); }
+function driverInitial(id) { return getDriverName(id)[0].toUpperCase(); }
+
+function buildTurnoCode(driverId, passengerIds) {
+  const active = activeDrivers();
+  const allPresent = [...new Set([driverId,...(passengerIds||[])])];
+  const sorted = active.map(d=>d.id).filter(id=>allPresent.includes(id));
+  return { code: sorted.map(id=>driverInitial(id)).join(''), t: 'T'+sorted.length };
+}
+
+function computeDriverForDate(targetDate) {
+  if (!isWorkday(targetDate)) return null;
+  const active = activeDrivers();
+  if (!active.length) return null;
+  const existing = state.history.find(h=>h.date===targetDate);
+  if (existing) return existing.driver;
+  const past = [...state.history]
+    .filter(h=>h.date<targetDate && active.find(a=>a.id===h.driver))
+    .sort((a,b)=>b.date.localeCompare(a.date));
+  if (!past.length) return active[0].id;
+  const idx = active.findIndex(a=>a.id===past[0].driver);
+  return active[(idx+1)%active.length].id;
+}
+
+function computeNextWorkday(fromDate) {
+  let d = new Date(fromDate+'T12:00:00');
+  for(let i=0;i<30;i++){
+    d.setDate(d.getDate()+1);
+    const s = d.toISOString().split('T')[0];
+    if(isWorkday(s)) return s;
+  }
+  return null;
+}
+
+function setLoading(show, msg) {
+  const el = document.getElementById('loading-overlay');
+  el.classList.toggle('hidden', !show);
+  if(msg) document.getElementById('loading-text').textContent = msg;
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function renderAll() {
+  renderHeader();
+  renderToday();
+  renderPassengers();
+  renderHistory();
+  renderDriversList();
+  renderCalendar();
+  renderHolidayList();
+}
+
+function renderHeader() {
+  const now = new Date();
+  const days=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const months=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  document.getElementById('header-date').innerHTML = `${days[now.getDay()]}<br>${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+}
+
+function renderToday() {
+  const targetDate = document.getElementById('turno-date').value || todayStr();
+  const holiday = isHoliday(targetDate);
+  const weekend = isWeekend(targetDate);
+  const banner = document.getElementById('holiday-banner');
+  const bannerText = document.getElementById('holiday-banner-text');
+  if (holiday||weekend) {
+    banner.style.display='flex';
+    bannerText.textContent = holiday ? 'Este día está marcado como festivo · los turnos no computan' : 'Es fin de semana · los turnos no computan';
+  } else banner.style.display='none';
+
+  const driverId = state.todayModified || computeDriverForDate(targetDate);
+  if (!driverId) { document.getElementById('today-driver-name').textContent='—'; return; }
+  const d = getDriver(driverId);
+  if (!d) return;
+  const av = document.getElementById('today-avatar');
+  av.style.background=d.color.bg; av.style.color=d.color.color;
+  av.textContent=getDriverInitials(d.id);
+  document.getElementById('today-driver-name').textContent=d.name;
+  document.getElementById('today-driver-info').textContent=`Le toca conducir · ${formatDate(targetDate)}`;
+  const badge=document.getElementById('today-badge');
+  if(state.todayModified){ badge.textContent='⚠️ Modificado manualmente'; badge.style.background='#fff3d0'; badge.style.color='#8c5a00'; }
+  else { badge.textContent='🔄 Rotación fija'; badge.style.background=''; badge.style.color=''; }
+
+  const nextDate = computeNextWorkday(targetDate);
+  if (nextDate) {
+    const nd = getDriver(computeDriverForDate(nextDate));
+    if (nd) {
+      document.getElementById('next-driver-name').textContent='🚗 '+nd.name;
+      document.getElementById('next-driver-sub').textContent=formatDate(nextDate)+' · '+getDayName(nextDate);
+    }
+  }
+  const ex = state.history.find(h=>h.date===targetDate);
+  if(ex){ document.getElementById('obs-input').value=ex.obs||''; state.todayPassengers=ex.passengers||[]; }
+}
+
+function renderPassengers() {
+  const active = activeDrivers();
+  const grid = document.getElementById('passengers-grid');
+  grid.innerHTML='';
+  active.forEach(d=>{
+    const btn=document.createElement('button');
+    btn.className='passenger-btn'+(state.todayPassengers.includes(d.id)?' active':'');
+    const dot=document.createElement('span'); dot.className='dot'; dot.style.background=d.color.color;
+    btn.appendChild(dot); btn.appendChild(document.createTextNode(d.name));
+    btn.onclick=()=>togglePassenger(d.id);
+    grid.appendChild(btn);
+  });
+}
+
+function togglePassenger(id) {
+  const idx=state.todayPassengers.indexOf(id);
+  if(idx>=0) state.todayPassengers.splice(idx,1); else state.todayPassengers.push(id);
+  renderPassengers();
+}
+
+function renderHistory() {
+  const tbody=document.getElementById('history-tbody');
+  const sorted=[...state.history].sort((a,b)=>b.date.localeCompare(a.date));
+  document.getElementById('history-count').textContent=sorted.length+' registros';
+  tbody.innerHTML='';
+  sorted.forEach(entry=>{
+    const d=getDriver(entry.driver);
+    const color=d?d.color:{bg:'#eee',color:'#666'};
+    const {code,t}=buildTurnoCode(entry.driver,entry.passengers||[]);
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td>${formatDate(entry.date)}</td>
+      <td style="color:var(--text2);text-transform:capitalize;">${entry.day||getDayName(entry.date)}</td>
+      <td><span class="badge-driver" style="background:${color.bg};color:${color.color};">${d?d.name:entry.driver}</span></td>
+      <td><div class="turno-code"><span class="turno-t">${t}</span><span class="turno-initials">${code}</span></div></td>
+      <td class="obs-cell">${entry.obs||''}</td>
+      <td><button class="btn btn-sm" onclick="openEditRow('${entry.id}')">✏️</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderDriversList() {
+  const list=document.getElementById('drivers-list');
+  list.innerHTML='';
+  state.drivers.forEach(d=>{
+    const row=document.createElement('div'); row.className='driver-row';
+    row.innerHTML=`
+      <div style="width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.8rem;font-weight:700;flex-shrink:0;background:${d.color.bg};color:${d.color.color};">${getDriverInitials(d.id)}</div>
+      <span class="name">${d.name}</span>
+      <span class="status-pill ${d.active?'pill-active':'pill-inactive'}">${d.active?'Activo':'Inactivo'}</span>
+      <button class="btn btn-sm" onclick="toggleDriver('${d.id}')">${d.active?'Desactivar':'Activar'}</button>
+    `;
+    list.appendChild(row);
+  });
+}
+
+/* ============================================================
+   CALENDAR
+   ============================================================ */
+let calYear=new Date().getFullYear(), calMonth=new Date().getMonth();
+
+function renderCalendar() {
+  const months=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  document.getElementById('cal-title').textContent=months[calMonth]+' '+calYear;
+  const grid=document.getElementById('cal-grid'); grid.innerHTML='';
+  ['L','M','X','J','V','S','D'].forEach(h=>{
+    const el=document.createElement('div'); el.className='cal-day-header'; el.textContent=h; grid.appendChild(el);
+  });
+  const firstDow=new Date(calYear,calMonth,1).getDay();
+  const blanks=(firstDow===0)?6:firstDow-1;
+  const daysInMonth=new Date(calYear,calMonth+1,0).getDate();
+  const today=todayStr();
+  for(let i=0;i<blanks;i++){ const el=document.createElement('div'); el.className='cal-day empty'; grid.appendChild(el); }
+  for(let day=1;day<=daysInMonth;day++){
+    const ds=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const el=document.createElement('div'); el.className='cal-day';
+    const dow=new Date(ds+'T12:00:00').getDay();
+    if(dow===6||dow===0) el.classList.add('weekend');
+    if(ds===today) el.classList.add('today');
+    if(isHoliday(ds)) el.classList.add('holiday');
+    if(state.history.some(h=>h.date===ds)) el.classList.add('has-turn');
+    el.textContent=day;
+    if(dow!==6&&dow!==0) el.onclick=()=>toggleHoliday(ds);
+    grid.appendChild(el);
+  }
+}
+
+async function toggleHoliday(ds) {
+  const idx=state.holidays.indexOf(ds);
+  if(idx>=0) state.holidays.splice(idx,1); else state.holidays.push(ds);
+  renderCalendar(); renderHolidayList(); renderToday();
+  try {
+    await apiCall({action:'saveHolidays', data:state.holidays});
+    toast((idx>=0?'📅 Festivo eliminado: ':'🎉 Festivo marcado: ')+formatDate(ds));
+  } catch(e) { toast('⚠️ No se pudo guardar en Drive'); }
+}
+
+function calPrev(){calMonth--;if(calMonth<0){calMonth=11;calYear--;}renderCalendar();}
+function calNext(){calMonth++;if(calMonth>11){calMonth=0;calYear++;}renderCalendar();}
+
+function renderHolidayList() {
+  const list=document.getElementById('holiday-list');
+  const sorted=[...state.holidays].sort();
+  document.getElementById('holiday-total-count').textContent=sorted.length?`(${sorted.length})`:'';
+  if(!sorted.length){ list.innerHTML='<p style="color:var(--text3);font-size:0.85rem;">Ningún festivo marcado aún.</p>'; return; }
+  list.innerHTML=sorted.map(d=>`
+    <div class="holiday-item">
+      <span>${formatDate(d)} <span style="color:var(--text3);font-size:0.78rem;">${getDayName(d)}</span></span>
+      <button class="holiday-remove" onclick="toggleHoliday('${d}')">✕</button>
+    </div>`).join('');
+}
+
+/* ============================================================
+   ACTIONS
+   ============================================================ */
+async function saveToday() {
+  const targetDate=document.getElementById('turno-date').value||todayStr();
+  const driverId=state.todayModified||computeDriverForDate(targetDate);
+  if(!driverId){toast('⚠️ No hay conductor asignado');return;}
+  const obs=document.getElementById('obs-input').value.trim();
+  const existing=state.history.findIndex(h=>h.date===targetDate);
+  const entry={
+    id:existing>=0?state.history[existing].id:'e_'+Date.now(),
+    date:targetDate, day:getDayName(targetDate), driver:driverId,
+    passengers:[...state.todayPassengers], obs
+  };
+  if(existing>=0) state.history[existing]=entry; else state.history.push(entry);
+  state.todayModified=null; state.todayPassengers=[];
+  document.getElementById('obs-input').value='';
+  renderAll();
+  try {
+    await apiCall({action:'saveHistory', data:entry});
+    toast('✅ Turno guardado en Drive: '+formatDate(targetDate));
+  } catch(e) { toast('⚠️ Guardado local. Sin conexión con Drive'); }
+}
+
+let editingRowId=null;
+function openEditRow(id) {
+  editingRowId=id;
+  const entry=state.history.find(h=>h.id===id);
+  if(!entry) return;
+  document.getElementById('edit-date').value=entry.date;
+  document.getElementById('edit-driver-select').innerHTML=state.drivers.map(d=>`<option value="${d.id}"${d.id===entry.driver?' selected':''}>${d.name}</option>`).join('');
+  document.getElementById('edit-obs').value=entry.obs||'';
+  const pg=document.getElementById('edit-passengers-grid'); pg.innerHTML='';
+  activeDrivers().forEach(d=>{
+    const active=(entry.passengers||[]).includes(d.id);
+    const btn=document.createElement('button');
+    btn.className='passenger-btn'+(active?' active':'');
+    btn.style.cssText='padding:6px 12px;font-size:0.82rem;';
+    const dot=document.createElement('span'); dot.className='dot'; dot.style.background=d.color.color;
+    btn.appendChild(dot); btn.appendChild(document.createTextNode(d.name));
+    btn.onclick=()=>btn.classList.toggle('active');
+    pg.appendChild(btn);
+  });
+  openModal('modal-edit-row');
+}
+
+async function saveEditRow() {
+  const entry=state.history.find(h=>h.id===editingRowId);
+  if(!entry) return;
+  entry.date=document.getElementById('edit-date').value;
+  entry.driver=document.getElementById('edit-driver-select').value;
+  entry.obs=document.getElementById('edit-obs').value.trim();
+  entry.day=getDayName(entry.date);
+  const btns=document.getElementById('edit-passengers-grid').querySelectorAll('.passenger-btn');
+  entry.passengers=activeDrivers().filter((_,i)=>btns[i]&&btns[i].classList.contains('active')).map(d=>d.id);
+  closeModal('modal-edit-row');
+  renderAll();
+  try { await apiCall({action:'saveHistory',data:entry}); toast('✅ Turno actualizado en Drive'); }
+  catch(e){ toast('⚠️ Actualizado local. Sin conexión con Drive'); }
+}
+
+async function deleteRow() {
+  if(!confirm('¿Eliminar este turno del historial?')) return;
+  const id=editingRowId;
+  state.history=state.history.filter(h=>h.id!==id);
+  closeModal('modal-edit-row'); renderAll();
+  try { await apiCall({action:'deleteHistory',id}); toast('🗑 Turno eliminado de Drive'); }
+  catch(e){ toast('⚠️ Eliminado local. Sin conexión con Drive'); }
+}
+
+function openModifyModal() {
+  document.getElementById('modify-driver-select').innerHTML=activeDrivers().map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+  document.getElementById('modify-reason').value='';
+  openModal('modal-modify');
+}
+
+function confirmModify() {
+  const driverId=document.getElementById('modify-driver-select').value;
+  const reason=document.getElementById('modify-reason').value.trim();
+  state.todayModified=driverId;
+  if(reason) document.getElementById('obs-input').value=reason;
+  closeModal('modal-modify'); renderToday();
+  toast('✏️ Conductor modificado: '+getDriverName(driverId));
+}
+
+async function toggleDriver(id) {
+  const d=state.drivers.find(x=>x.id===id);
+  if(!d) return;
+  d.active=!d.active;
+  renderDriversList();
+  try { await apiCall({action:'saveDrivers',data:state.drivers}); toast(d.active?`${d.name} activado`:`${d.name} desactivado`); }
+  catch(e){ toast('⚠️ Sin conexión con Drive'); }
+}
+
+function openAddDriverModal() { document.getElementById('new-driver-name').value=''; openModal('modal-add-driver'); }
+
+async function confirmAddDriver() {
+  const name=document.getElementById('new-driver-name').value.trim();
+  if(!name){toast('⚠️ Introduce un nombre');return;}
+  const id=name.toLowerCase().replace(/\s+/g,'').replace(/[áàä]/g,'a').replace(/[éèë]/g,'e').replace(/[íìï]/g,'i').replace(/[óòö]/g,'o').replace(/[úùü]/g,'u').replace(/ñ/g,'n');
+  if(state.drivers.find(d=>d.id===id)){toast('⚠️ Ya existe ese conductor');return;}
+  const palettes=[{bg:'#f0e8ff',color:'#5c2f8c'},{bg:'#fff0f0',color:'#8c1a1a'},{bg:'#e8fff0',color:'#1a5c3a'},{bg:'#f5f0e8',color:'#5c4a1a'}];
+  state.drivers.push({id,name,active:true,color:palettes[Math.floor(Math.random()*palettes.length)]});
+  closeModal('modal-add-driver'); renderAll();
+  try { await apiCall({action:'saveDrivers',data:state.drivers}); toast(`✅ ${name} añadido`); }
+  catch(e){ toast('⚠️ Sin conexión con Drive'); }
+}
+
+/* ============================================================
+   SCRIPT URL CONFIG
+   ============================================================ */
+function saveScriptUrl() {
+  const url=document.getElementById('script-url-input').value.trim();
+  if(!url||!url.startsWith('https://')){ toast('⚠️ URL no válida'); return; }
+  SCRIPT_URL=url;
+  localStorage.setItem(URL_KEY, url);
+  document.getElementById('config-banner').style.display='none';
+  loadFromServer();
+}
+
+/* ============================================================
+   MODAL / TAB
+   ============================================================ */
+function openModal(id){document.getElementById(id).classList.add('open');}
+function closeModal(id){document.getElementById(id).classList.remove('open');}
+
+function showTab(name) {
+  const names=['hoy','historial','calendario','conductores'];
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',names[i]===name));
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  if(name==='calendario'){renderCalendar();renderHolidayList();}
+}
+
+function toast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+document.getElementById('turno-date').value=todayStr();
+document.getElementById('turno-date').addEventListener('change',function(){
+  state.todayModified=null; state.todayPassengers=[];
+  document.getElementById('obs-input').value='';
+  renderToday(); renderPassengers();
+});
+document.querySelectorAll('.modal-overlay').forEach(el=>{
+  el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open');});
+});
+
+loadFromServer();
+</script>
+</body>
+</html>

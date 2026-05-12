@@ -162,17 +162,20 @@
         <label style="font-size:0.8rem;font-weight:600;color:var(--text2);display:block;margin-bottom:5px;">Fecha del turno</label>
         <input type="date" id="turno-date" style="max-width:220px;padding:9px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:0.9rem;color:var(--text);background:var(--surface);font-family:inherit;">
       </div>
-      <div class="driver-display">
-        <div class="driver-avatar" id="today-avatar"></div>
-        <div class="driver-info">
-          <h3 id="today-driver-name">—</h3>
-          <p id="today-driver-info">Cargando…</p>
-          <div class="driver-badge" id="today-badge">🔄 Rotación fija</div>
-        </div>
-      </div>
       <div class="who-section">
         <label>¿Quién va ese día? (marca los que vienen)</label>
         <div class="passengers-grid" id="passengers-grid"></div>
+        <!-- Conductor calculado dinámicamente -->
+        <div id="driver-result" style="display:none; margin-bottom:0.75rem;">
+          <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--primary-light);border:1.5px solid var(--primary);border-radius:var(--radius-sm);">
+            <div class="driver-avatar" id="today-avatar" style="width:42px;height:42px;font-size:1rem;flex-shrink:0;"></div>
+            <div>
+              <div style="font-size:0.72rem;font-weight:600;color:var(--primary);text-transform:uppercase;letter-spacing:0.07em;">Le toca conducir</div>
+              <div style="font-size:1.1rem;font-weight:700;color:var(--text);" id="today-driver-name">—</div>
+              <div class="driver-badge" id="today-badge" style="margin-top:3px;">🔄 Rotación fija</div>
+            </div>
+          </div>
+        </div>
         <div class="form-group" style="margin-top:0.75rem;margin-bottom:0.5rem;">
           <label>Observaciones (opcional)</label>
           <textarea id="obs-input" placeholder="Ej: Carmen compensando turno del 5/5…" rows="2"></textarea>
@@ -186,9 +189,9 @@
     </div>
     <div class="next-card">
       <div class="next-card-info">
-        <p>📅 Próximo turno</p>
+        <p>⚠️ Aviso · siguiente en la rotación</p>
         <h3 id="next-driver-name">—</h3>
-        <p style="font-size:0.8rem;margin-top:4px;font-weight:400;" id="next-driver-sub">según rotación</p>
+        <p style="font-size:0.8rem;margin-top:4px;font-weight:400;" id="next-driver-sub">según rotación fija</p>
       </div>
       <div class="next-card-icon" id="next-icon">🏷️</div>
     </div>
@@ -544,23 +547,33 @@ function renderHeader(){
 
 function renderToday(){
   const targetDate=document.getElementById('turno-date').value||todayStr();
-  const driverId=state.todayModified||computeDriverForDate(targetDate);
-  if(!driverId){document.getElementById('today-driver-name').textContent='—';return;}
-  const d=getDriver(driverId); if(!d)return;
-  const av=document.getElementById('today-avatar');
-  av.style.background=d.color.bg;av.style.color=d.color.color;av.textContent=getDriverInitials(d.id);
-  document.getElementById('today-driver-name').textContent=d.name;
-  document.getElementById('today-driver-info').textContent=`Le toca conducir · ${formatDate(targetDate)}`;
-  const badge=document.getElementById('today-badge');
-  if(state.todayModified){badge.textContent='⚠️ Modificado manualmente';badge.style.background='#fff3d0';badge.style.color='#8c5a00';}
-  else{badge.textContent='🔄 Rotación fija';badge.style.background='';badge.style.color='';}
+  updateDriverResult();
   const nextDate=computeNextWorkday(targetDate);
   if(nextDate){
     const nd=getDriver(computeDriverForDate(nextDate));
-    if(nd){document.getElementById('next-driver-name').textContent='🚗 '+nd.name;document.getElementById('next-driver-sub').textContent=formatDate(nextDate)+' · '+getDayName(nextDate);}
+    if(nd){
+      document.getElementById('next-driver-name').textContent=nd.name;
+      document.getElementById('next-driver-sub').textContent=formatDate(nextDate)+' · '+getDayName(nextDate);
+    }
   }
   const ex=state.history.find(h=>h.date===targetDate);
   if(ex){document.getElementById('obs-input').value=ex.obs||'';state.todayPassengers=ex.passengers||[];}
+}
+
+function updateDriverResult(){
+  const targetDate=document.getElementById('turno-date').value||todayStr();
+  const result=document.getElementById('driver-result');
+  if(state.todayPassengers.length===0&&!state.todayModified){result.style.display='none';return;}
+  const driverId=state.todayModified||computeDriverForDate(targetDate);
+  if(!driverId){result.style.display='none';return;}
+  const d=getDriver(driverId);if(!d){result.style.display='none';return;}
+  result.style.display='block';
+  const av=document.getElementById('today-avatar');
+  av.style.background=d.color.bg;av.style.color=d.color.color;av.textContent=getDriverInitials(d.id);
+  document.getElementById('today-driver-name').textContent=d.name;
+  const badge=document.getElementById('today-badge');
+  if(state.todayModified){badge.textContent='⚠️ Modificado manualmente';badge.style.background='#fff3d0';badge.style.color='#8c5a00';}
+  else{badge.textContent='🔄 Rotación fija';badge.style.background='';badge.style.color='';}
 }
 
 function renderPassengers(){
@@ -578,6 +591,7 @@ function togglePassenger(id){
   const idx=state.todayPassengers.indexOf(id);
   if(idx>=0)state.todayPassengers.splice(idx,1);else state.todayPassengers.push(id);
   renderPassengers();
+  updateDriverResult();
 }
 
 function renderHistory(){

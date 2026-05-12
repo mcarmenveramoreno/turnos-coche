@@ -204,6 +204,12 @@
         <h2>📋 Historial de turnos</h2>
         <span id="history-count" style="font-size:0.8rem;color:var(--text3);"></span>
       </div>
+      <!-- FILTRO -->
+      <div style="padding:0.75rem 1.25rem;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;align-items:center;gap:8px;">
+        <span style="font-size:0.78rem;font-weight:600;color:var(--text2);">Filtrar por:</span>
+        <div id="filter-grid" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+        <button class="btn btn-sm" onclick="clearFilter()" id="btn-clear-filter" style="display:none;">✕ Quitar filtro</button>
+      </div>
       <div class="history-table-wrap">
         <table>
           <thead>
@@ -493,10 +499,32 @@ async function loadFromServer(){
   setLoading(false);
 }
 async function uploadHistorical(){
-  state.history=HISTORICAL_DATA.map((r,i)=>({id:'hist_'+i,date:r.date,day:r.day,driver:r.driver,passengers:[],obs:r.obs}));
+  // Para el histórico importado, inferimos el grupo completo de 4 (T4CJDA)
+  // salvo que haya observaciones que indiquen ausencias — en ese caso T4 por defecto
+  const defaultGroup=['carmen','josemaria','diego','abel'];
+  state.history=HISTORICAL_DATA.map((r,i)=>{
+    // Pasajeros = todos los del grupo excepto el conductor
+    const passengers=defaultGroup.filter(id=>id!==r.driver);
+    return {
+      id:'hist_'+i,
+      date:r.date,
+      day:r.day,
+      driver:r.driver,
+      passengers,
+      turno:buildTurnoCodeFromIds(r.driver,passengers),
+      obs:r.obs
+    };
+  });
   state.drivers=DEFAULT_DRIVERS;
   for(const e of state.history) await apiCall({action:'saveHistory',data:e});
   await apiCall({action:'saveDrivers',data:state.drivers});
+}
+
+function buildTurnoCodeFromIds(driverId, passengerIds){
+  const order=['carmen','josemaria','diego','abel'];
+  const allPresent=[...new Set([driverId,...(passengerIds||[])])];
+  const sorted=order.filter(id=>allPresent.includes(id));
+  return 'T'+sorted.length+sorted.map(id=>getDriverName(id)[0].toUpperCase()).join('');
 }
 
 /* HELPERS */
@@ -518,30 +546,29 @@ function buildTurnoCode(driverId,passengerIds){
 
 function computeDriverForDate(targetDate, passengerIds){
   const active=activeDrivers(); if(!active.length)return null;
-  // Si ya hay un turno registrado para esa fecha, usarlo
   const existing=state.history.find(h=>h.date===targetDate);
   if(existing)return existing.driver;
-  // Si no hay pasajeros seleccionados, no podemos calcular
   if(!passengerIds||passengerIds.length===0)return null;
-  // Grupo: pasajeros seleccionados (en orden de rotación)
   const group=active.map(d=>d.id).filter(id=>passengerIds.includes(id));
   if(!group.length)return null;
-  // Buscar el último turno registrado con exactamente este mismo grupo
+  return computeNextDriverForGroup(group, targetDate);
+}
+
+function computeNextDriverForGroup(group, beforeDate){
+  // Buscar último turno con exactamente este grupo
   const sameGroup=[...state.history]
     .filter(h=>{
-      const hGroup=active.map(d=>d.id).filter(id=>[h.driver,...(h.passengers||[])].includes(id));
-      return h.date<targetDate &&
-             hGroup.length===group.length &&
-             hGroup.every(id=>group.includes(id));
+      if(beforeDate && h.date>=beforeDate) return false;
+      const involved=[h.driver,...(h.passengers||[])];
+      const hGroup=group.filter(id=>involved.includes(id));
+      return hGroup.length===group.length && involved.filter(id=>group.includes(id)).length===group.length;
     })
     .sort((a,b)=>b.date.localeCompare(a.date));
   if(sameGroup.length){
-    // Siguiente en la rotación dentro del grupo
     const lastDriver=sameGroup[0].driver;
     const idxInGroup=group.indexOf(lastDriver);
     return group[(idxInGroup+1)%group.length];
   }
-  // Si no hay historial para este grupo, asignar el primero del grupo en la rotación
   return group[0];
 }
 function computeNextWorkday(fromDate){
@@ -624,10 +651,53 @@ function togglePassenger(id){
   renderToday();
 }
 
+let historyFilter=[];
+
+function renderFilterGrid(){
+  const grid=document.getElementById('filter-grid');
+  grid.innerHTML='';
+  activeDrivers().forEach(d=>{
+    const active=historyFilter.includes(d.id);
+    const btn=document.createElement('button');
+    btn.className='passenger-btn'+(active?' active':'');
+    btn.style.cssText='padding:5px 12px;font-size:0.8rem;';
+    const dot=document.createElement('span');dot.className='dot';dot.style.background=d.color.color;
+    btn.appendChild(dot);btn.appendChild(document.createTextNode(d.name));
+    btn.onclick=()=>toggleFilter(d.id);
+    grid.appendChild(btn);
+  });
+}
+
+function toggleFilter(id){
+  const idx=historyFilter.indexOf(id);
+  if(idx>=0)historyFilter.splice(idx,1);else historyFilter.push(id);
+  document.getElementById('btn-clear-filter').style.display=historyFilter.length?'inline-flex':'none';
+  renderFilterGrid();
+  renderHistory();
+}
+
+function clearFilter(){
+  historyFilter=[];
+  document.getElementById('btn-clear-filter').style.display='none';
+  renderFilterGrid();
+  renderHistory();
+}
+
 function renderHistory(){
+  renderFilterGrid();
   const tbody=document.getElementById('history-tbody');
-  const sorted=[...state.history].sort((a,b)=>b.date.localeCompare(a.date));
-  document.getElementById('history-count').textContent=sorted.length+' registros';
+  let sorted=[...state.history].sort((a,b)=>b.date.localeCompare(a.date));
+  // Aplicar filtro: mostrar solo turnos donde aparecen TODOS los seleccionados
+  if(historyFilter.length>0){
+    sorted=sorted.filter(entry=>{
+      const involved=[entry.driver,...(entry.passengers||[])];
+      return historyFilter.every(id=>involved.includes(id));
+    });
+  }
+  const total=state.history.length;
+  const shown=sorted.length;
+  document.getElementById('history-count').textContent=
+    historyFilter.length>0 ? `${shown} de ${total} registros` : `${total} registros`;
   tbody.innerHTML='';
   sorted.forEach(entry=>{
     const d=getDriver(entry.driver);

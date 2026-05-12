@@ -516,14 +516,33 @@ function buildTurnoCode(driverId,passengerIds){
   return 'T'+sorted.length+sorted.map(id=>driverInitial(id)).join('');
 }
 
-function computeDriverForDate(targetDate){
+function computeDriverForDate(targetDate, passengerIds){
   const active=activeDrivers(); if(!active.length)return null;
+  // Si ya hay un turno registrado para esa fecha, usarlo
   const existing=state.history.find(h=>h.date===targetDate);
   if(existing)return existing.driver;
-  const past=[...state.history].filter(h=>h.date<targetDate&&active.find(a=>a.id===h.driver)).sort((a,b)=>b.date.localeCompare(a.date));
-  if(!past.length)return active[0].id;
-  const idx=active.findIndex(a=>a.id===past[0].driver);
-  return active[(idx+1)%active.length].id;
+  // Si no hay pasajeros seleccionados, no podemos calcular
+  if(!passengerIds||passengerIds.length===0)return null;
+  // Grupo: pasajeros seleccionados (en orden de rotación)
+  const group=active.map(d=>d.id).filter(id=>passengerIds.includes(id));
+  if(!group.length)return null;
+  // Buscar el último turno registrado con exactamente este mismo grupo
+  const sameGroup=[...state.history]
+    .filter(h=>{
+      const hGroup=active.map(d=>d.id).filter(id=>[h.driver,...(h.passengers||[])].includes(id));
+      return h.date<targetDate &&
+             hGroup.length===group.length &&
+             hGroup.every(id=>group.includes(id));
+    })
+    .sort((a,b)=>b.date.localeCompare(a.date));
+  if(sameGroup.length){
+    // Siguiente en la rotación dentro del grupo
+    const lastDriver=sameGroup[0].driver;
+    const idxInGroup=group.indexOf(lastDriver);
+    return group[(idxInGroup+1)%group.length];
+  }
+  // Si no hay historial para este grupo, asignar el primero del grupo en la rotación
+  return group[0];
 }
 function computeNextWorkday(fromDate){
   let d=new Date(fromDate+'T12:00:00');
@@ -548,13 +567,24 @@ function renderHeader(){
 function renderToday(){
   const targetDate=document.getElementById('turno-date').value||todayStr();
   updateDriverResult();
-  const nextDate=computeNextWorkday(targetDate);
-  if(nextDate){
-    const nd=getDriver(computeDriverForDate(nextDate));
-    if(nd){
-      document.getElementById('next-driver-name').textContent=nd.name;
-      document.getElementById('next-driver-sub').textContent=formatDate(nextDate)+' · '+getDayName(nextDate);
+  // Aviso: siguiente en la rotación para el mismo grupo
+  const group=activeDrivers().map(d=>d.id).filter(id=>state.todayPassengers.includes(id));
+  const nextCard=document.querySelector('.next-card');
+  if(group.length>0){
+    // Siguiente conductor en el grupo
+    const currentDriver=state.todayModified||computeDriverForDate(targetDate,state.todayPassengers);
+    if(currentDriver){
+      const idxInGroup=group.indexOf(currentDriver);
+      const nextInGroup=group[(idxInGroup+1)%group.length];
+      const nd=getDriver(nextInGroup);
+      if(nd){
+        document.getElementById('next-driver-name').textContent=nd.name;
+        document.getElementById('next-driver-sub').textContent='Siguiente en este grupo · '+buildTurnoCode(currentDriver,state.todayPassengers);
+        nextCard.style.display='flex';
+      }
     }
+  } else {
+    nextCard.style.display='none';
   }
   const ex=state.history.find(h=>h.date===targetDate);
   if(ex){document.getElementById('obs-input').value=ex.obs||'';state.todayPassengers=ex.passengers||[];}
@@ -564,7 +594,7 @@ function updateDriverResult(){
   const targetDate=document.getElementById('turno-date').value||todayStr();
   const result=document.getElementById('driver-result');
   if(state.todayPassengers.length===0&&!state.todayModified){result.style.display='none';return;}
-  const driverId=state.todayModified||computeDriverForDate(targetDate);
+  const driverId=state.todayModified||computeDriverForDate(targetDate, state.todayPassengers);
   if(!driverId){result.style.display='none';return;}
   const d=getDriver(driverId);if(!d){result.style.display='none';return;}
   result.style.display='block';
@@ -591,7 +621,7 @@ function togglePassenger(id){
   const idx=state.todayPassengers.indexOf(id);
   if(idx>=0)state.todayPassengers.splice(idx,1);else state.todayPassengers.push(id);
   renderPassengers();
-  updateDriverResult();
+  renderToday();
 }
 
 function renderHistory(){
@@ -633,7 +663,7 @@ function renderDriversList(){
 /* ACTIONS */
 async function saveToday(){
   const targetDate=document.getElementById('turno-date').value||todayStr();
-  const driverId=state.todayModified||computeDriverForDate(targetDate);
+  const driverId=state.todayModified||computeDriverForDate(targetDate, state.todayPassengers);
   if(!driverId){toast('⚠️ No hay conductor asignado');return;}
   const obs=document.getElementById('obs-input').value.trim();
   const existing=state.history.findIndex(h=>h.date===targetDate);
